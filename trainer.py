@@ -18,6 +18,11 @@ def main():
     all_results = {}
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # Pre‑compute random projection matrix (same for all ETFs and windows)
+    d_in = 14   # signature depth 3
+    d_out = config.RANDOM_DIM
+    proj = generate_random_projection(d_in, d_out, seed=42)
+
     for universe_name, tickers in config.UNIVERSES.items():
         print(f"\n=== Universe: {universe_name} (Randomised Signature) ===")
         prices = data_manager.prepare_price_matrix(df, tickers)
@@ -25,11 +30,6 @@ def main():
             print("  Insufficient data")
             all_results[universe_name] = {"top_etfs": []}
             continue
-
-        # Pre‑compute random projection matrix (same for all ETFs and windows)
-        d_in = 14   # signature depth 3
-        d_out = config.RANDOM_DIM
-        proj = generate_random_projection(d_in, d_out, seed=42)
 
         best_per_etf = {}
         window_results = {}
@@ -43,23 +43,19 @@ def main():
             for etf in tickers:
                 if etf not in prices.columns:
                     continue
-                # Build training data using rolling windows of size `config.WINDOW`
                 price_series = prices[etf].dropna()
                 if len(price_series) < win + config.WINDOW + 1:
                     continue
-                # Use the last `win` days as the training period? No, we need to create a supervised dataset from the last `win` days.
-                # Actually, we use the last `win` days as the data for training, sliding a window of size `config.WINDOW` inside it.
-                # Simpler: For each ETF, we use the whole `win` period to generate signatures and train the model.
-                # We'll slide over the most recent `win` days: for each i in [WINDOW, win-1], create signature of the last WINDOW days up to i.
-                # But that would use data only from the training window; to predict the next day after the window, we need to use the last WINDOW days of the training window.
-                # We'll implement a walk‑forward inside the window: for each i in [WINDOW, win-1], train on data from i-WINDOW to i, predict next day.
-                # This is similar to the other engines.
-                # However, to keep it simple and fast, we train on the entire `win` period and then predict using the most recent WINDOW days.
-                # That's what we'll do: use the last `win` days as the training set, then predict the next day.
-                # Build features: for each day from WINDOW to win-1, signature of the last WINDOW days of prices.
-                X, y = [], []
-                for i in range(config.WINDOW, win):
-                    window_prices = price_series.iloc[i-config.WINDOW:i]
+                # Build training dataset from the last `win` days
+                X = []
+                y = []
+                # Use data from the end of the window: for each i from WINDOW to win-1
+                # We take the subseries from i-WINDOW to i, compute signature, target = next day's return
+                # Only use data within the training window (last `win` days)
+                # The index of price_series: we take the last `win` days as the training window
+                train_prices = price_series.iloc[-win:]
+                for i in range(config.WINDOW, len(train_prices)-1):
+                    window_prices = train_prices.iloc[i-config.WINDOW:i]
                     path = lead_lag_path(window_prices)
                     if path is None:
                         continue
@@ -68,8 +64,8 @@ def main():
                         continue
                     proj_sig = project_signature(sig, proj)
                     X.append(proj_sig)
-                    # target: next day return
-                    ret = np.log(price_series.iloc[i+1] / price_series.iloc[i]) if i+1 < len(price_series) else np.nan
+                    # Next day return from the same training window
+                    ret = np.log(train_prices.iloc[i+1] / train_prices.iloc[i])
                     if np.isnan(ret):
                         continue
                     y.append(ret)
@@ -82,7 +78,7 @@ def main():
                 model = Ridge(alpha=config.RIDGE_ALPHA)
                 model.fit(X_scaled, y)
                 # Predict for the most recent window (last WINDOW days of the training window)
-                last_window = price_series.iloc[-config.WINDOW:]
+                last_window = train_prices.iloc[-config.WINDOW:]
                 last_path = lead_lag_path(last_window)
                 if last_path is None:
                     continue
@@ -103,7 +99,6 @@ def main():
             all_results[universe_name] = {"top_etfs": []}
             continue
 
-        # Store full scores for all ETFs
         full_scores = {ticker: {"score": score, "best_window": win} for ticker, (score, win) in best_per_etf.items()}
         sorted_etfs = sorted(best_per_etf.items(), key=lambda x: x[1][0], reverse=True)
         top_etfs = [{"ticker": ticker, "pred_return": float(score), "best_window": win} for ticker, (score, win) in sorted_etfs[:config.TOP_N]]
