@@ -17,19 +17,19 @@ UNIVERSES = {
     ]
 }
 
-# Rolling window for return curves (days)
+# Rolling windows for evaluation (days) – always these six
+WINDOWS = [63, 252, 504, 1008, 2016]
+
+# Fixed signature window length (days) – used to compute each signature
 WINDOW = 63
 
-# Signature depth (2 or 3) – this determines original signature dimension
-SIG_DEPTH = 3        # full signature dimension = 2^1+2^2+2^3 = 14
+# Signature depth (3 -> 14 features)
+SIG_DEPTH = 3
 
-# Random projection target dimension (much smaller)
-RANDOM_DIM = 32      # Johnson‑Lindenstrauss: O(log N) is enough, but we set fixed
+# Random projection target dimension
+RANDOM_DIM = 32
 
-# Ridge regression alpha (regularisation)
+# Ridge regression alpha
 RIDGE_ALPHA = 1.0
-
-# Rolling training window (days)
-TRAIN_WINDOW = 252
 
 TOP_N = 3
