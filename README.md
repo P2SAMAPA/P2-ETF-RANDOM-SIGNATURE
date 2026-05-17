@@ -1,42 +1,19 @@
-# P2-ETF-RANDOM-SIGNATURE
+# Randomised Signature Engine
 
-Welcome to the P2-ETF-RANDOM-SIGNATURE repository!
+Fast path signature regression using random projections (Johnson‑Lindenstrauss). The full signature (depth 3, 14 terms) is projected into a low‑dimensional space (e.g., 32 dimensions) before ridge regression. This makes the engine O(d) per step instead of O(d^n) and works well for daily retraining.
 
-## Overview
+- **Window:** 63 days
+- **Signature depth:** 3
+- **Random projection dimension:** 32
+- **Ridge α:** 1.0
+- **Output:** top 3 ETFs per universe by predicted return
 
-This project is designed to work with ETF (Exchange-Traded Fund) data and implements random signature functionality.
+Runs daily on GitHub Actions.
 
-## Getting Started
-
-To get started with this project, clone the repository and follow the instructions below.
+## Local execution
 
 ```bash
-git clone https://github.com/P2SAMAPA/P2-ETF-RANDOM-SIGNATURE.git
-cd P2-ETF-RANDOM-SIGNATURE
-```
-
-## Features
-
-- ETF data handling
-- Random signature generation
-- [Add more features as needed]
-
-## Installation
-
-[Add installation instructions specific to your project]
-
-## Usage
-
-[Add usage examples and instructions]
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
-## License
-
-[Specify your project's license]
-
-## Contact
-
-For more information, visit [your contact or repository information]
+pip install -r requirements.txt
+export HF_TOKEN=<your_token>
+python trainer.py
+streamlit run streamlit_app.py
