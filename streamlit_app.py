@@ -18,15 +18,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="main-header">⚡ Randomised Signature Engine</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Random projections (Johnson‑Lindenstrauss) + path signatures | Ridge regression | Fast & scalable</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Random projections (Johnson‑Lindenstrauss) + path signatures | Ridge regression | Multi‑window evaluation</div>', unsafe_allow_html=True)
 
 st.sidebar.markdown("## ⚡ Randomised Signature")
 st.sidebar.markdown(f"**Run Date:** `{st.session_state.get('run_date', 'Not loaded')}`")
 st.sidebar.markdown(f"**Next Trading Day:** `{next_trading_day()}`")
-st.sidebar.markdown(f"**Window:** {config.WINDOW} days")
-st.sidebar.markdown(f"**Signature depth:** {config.SIG_DEPTH} → {14} features")
+st.sidebar.markdown(f"**Window length:** {config.WINDOW} days")
 st.sidebar.markdown(f"**Random projection dim:** {config.RANDOM_DIM}")
-st.sidebar.markdown(f"**Ridge α:** {config.RIDGE_ALPHA}")
+st.sidebar.markdown("**Windows evaluated:** 63, 252, 504, 1008, 2016 days (best per ETF)")
 
 OUTPUT_REPO = config.OUTPUT_REPO
 HF_TOKEN = config.HF_TOKEN
@@ -70,7 +69,7 @@ if "error" in data:
 st.session_state['run_date'] = data['run_date']
 universes = data["universes"]
 
-st.header("🏆 Top ETFs by Randomised Signature Predicted Return")
+st.header("🏆 Top ETFs by Randomised Signature Predicted Return (Best Window)")
 
 for universe_name, uni_data in universes.items():
     top_etfs = uni_data.get("top_etfs", [])
@@ -83,15 +82,27 @@ for universe_name, uni_data in universes.items():
             st.markdown(f"""
             <div class="etf-card">
                 <div class="etf-ticker">{etf['ticker']}</div>
-                <div class="etf-score">pred return = {etf['pred_return']:.4f}</div>
+                <div class="etf-score">pred return = {etf['pred_return']:.6f}</div>
+                <div class="etf-score">best window = {etf.get('best_window', 'N/A')}d</div>
             </div>
             """, unsafe_allow_html=True)
-    with st.expander("📋 Full ranking (all ETFs)"):
+    with st.expander("📋 Full ranking (all ETFs, best window per ETF)"):
         full = uni_data.get("full_scores", {})
         if full:
-            df = pd.DataFrame(list(full.items()), columns=["ETF", "Predicted Return"])
-            df = df.sort_values("Predicted Return", ascending=False)
+            rows = []
+            for ticker, info in full.items():
+                if isinstance(info, dict):
+                    score = info.get("score", 0.0)
+                    win = info.get("best_window", "N/A")
+                else:
+                    score = info
+                    win = "N/A"
+                rows.append({"ETF": ticker, "Predicted Return": score, "Best Window": win})
+            df = pd.DataFrame(rows)
+            # Convert Predicted Return to numeric and drop NaN
+            df["Predicted Return"] = pd.to_numeric(df["Predicted Return"], errors='coerce')
+            df = df.dropna(subset=["Predicted Return"]).sort_values("Predicted Return", ascending=False)
             st.dataframe(df, use_container_width=True, hide_index=True)
     st.divider()
 
-st.caption("Path signatures (depth 3) are projected into a fixed‑dimensional random space (Johnson‑Lindenstrauss) then used in a ridge regression to predict next‑day returns. This is much faster than full signature regression while preserving predictive structure.")
+st.caption("Path signatures (depth 3) are projected into a fixed‑dimensional random space (Johnson‑Lindenstrauss) then used in ridge regression to predict next‑day returns. For each ETF, the window that gives the highest predicted return is selected. Higher predicted return → stronger long signal.")
